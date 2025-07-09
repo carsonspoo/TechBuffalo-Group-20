@@ -1,90 +1,43 @@
 import requests
-import bs4
-import certifi
-import urllib3
-import json
-import time
-from newspaper import Article
+from bs4 import BeautifulSoup
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# Default Bing Search URL
+url = 'https://bing.com/search?q='
 
-# Default Google Search Url
-url = 'https://google.com/search?q='
+# Customized Search Keywords
+events = "senecababcock neighborhood buffalo "
+events = events.replace(' ', '%20')
 
-# Customized Search Keywords (matching the paid version)
-town_variations = [
-    "Seneca-Babcock",
-    "Seneca Babcock", 
-    "seneca-babcock",
-    "seneca babcock"
-]
+headers = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/114.0.0.0 Safari/537.36"
+    )
+}
 
-# Output file
-OUTPUT_FILE = "compiled_articles.json"
-scraped_articles = []
+# Fetch URL Request Data
+try:
+    request_result = requests.get(url + events, headers=headers, timeout=10)
+    request_result.raise_for_status()
+except requests.RequestException as e:
+    print("Error fetching Bing search results:", e)
+    exit(1)
 
-# Function to scrape article content (same as paid version)
-def scrape_url(url):
-    try:
-        article = Article(url)
-        article.download()
-        article.parse()
-        return {
-            "title": article.title,
-            "text": article.text,
-            "url": url
-        }
-    except Exception as e:
-        print(f"Failed to scrape {url}: {e}")
-        return None
+# Creating Soup from the fetched request
+soup = BeautifulSoup(request_result.text, "html.parser")
 
-# Main scraping loop
-for town_variation in town_variations:
-    print(f"\n=== Searching for: {town_variation} ===")
-    
-    # Construct search query
-    search_query = f"{town_variation} history OR news"
-    
-    # Fetch URL Request Data
-    request_result = requests.get(url + search_query, verify=False)
-    
-    # Creating Soup from the fetched request
-    soup = bs4.BeautifulSoup(request_result.text, "html.parser")
-    
-    # Find all search result links
-    link_elements = soup.find_all("a")
-    
-    print(f"Processing search results for '{town_variation}'...")
-    
-    for link_element in link_elements:
-        href = link_element.get('href')
-        if not href or not href.startswith('/url?q='):
-            continue
-            
-        # Extract the actual URL from Google's redirect
-        actual_url = href.split('/url?q=')[1].split('&')[0]
-        
-        # Skip non-http URLs
-        if not actual_url.startswith('http'):
-            continue
-            
-        # Check if we already have this URL to avoid duplicates
-        existing_urls = {article["url"] for article in scraped_articles}
-        if actual_url in existing_urls:
-            print(f"Skipping duplicate: {actual_url}")
-            continue
-            
-        print(f"Scraping: {actual_url}")
-        data = scrape_url(actual_url)
-        if data:
-            scraped_articles.append(data)
-        time.sleep(1.5)  # Avoid hammering sites
-    
-    # Add delay between different town name variations
-    time.sleep(3)
+# Grab all major headings from search result
+heading_object = soup.find_all('h2')
 
-# Save to file (same format as paid version)
-with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-    json.dump(scraped_articles, f, indent=2, ensure_ascii=False)
+urls = []
+# Iterate and print through result_headings
+for info in heading_object:
+    a_tag = info.find('a')
+    if a_tag and a_tag.get('href'):
+        urls.append(a_tag.get('href'))
+        print("Title:", info.get_text())
+        print("URL:", a_tag['href'])
+        print("----------")
 
-print(f"Done. {len(scraped_articles)} articles saved to {OUTPUT_FILE}")
+print(urls)
